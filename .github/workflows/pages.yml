@@ -35,6 +35,11 @@ jobs:
           mkdir -p dist
           python app/generate_worksheet.py --output dist/worksheet.pdf --font-size 64 --row-height 0 --row-gap 16 --margin 54 --pair-spacing 4
 
+      - name: Build presets PDF
+        run: |
+          mkdir -p dist
+          python app/generate_worksheet.py --presets --output dist/presety-1-7.pdf
+
       - name: Prepare static site
         run: |
           mkdir -p dist

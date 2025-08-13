@@ -6,7 +6,7 @@ from pathlib import Path
 from io import BytesIO
 import re
 import sys
-from typing import Tuple
+from typing import Tuple, Literal
 
 import requests
 from reportlab.pdfgen import canvas
@@ -116,6 +116,50 @@ def draw_double_pair_lines(
         rows_y.append((y_top_outer, y_top_inner, y_bottom_inner, y_bottom_outer))
 
     return rows_y
+
+
+def draw_triple_lines(
+    pdf: canvas.Canvas,
+    left_x: float,
+    right_x: float,
+    top_y: float,
+    z_height: float,
+    num_rows: int,
+    line_color: Color = Color(0.85, 0.85, 0.85),
+    solid_width: float = 1.2,
+    dashed_width: float = 0.9,
+    xheight_ratio: float = 0.66,
+    row_gap: float = 16.0,
+) -> list[Tuple[float, float, float]]:
+    """Top solid, middle dashed (x-height), bottom solid (baseline). Returns (top, mid, bottom)."""
+    coords: list[Tuple[float, float, float]] = []
+    x0 = left_x
+    x1 = right_x
+
+    pdf.setStrokeColor(line_color)
+
+    for i in range(num_rows):
+        y_top = top_y - i * (z_height + row_gap)
+        y_mid = y_top - (z_height * xheight_ratio)
+        y_bottom = y_top - z_height
+
+        # Top
+        pdf.setLineWidth(solid_width)
+        pdf.setDash()
+        pdf.line(x0, y_top, x1, y_top)
+        # Middle dashed
+        pdf.setLineWidth(dashed_width)
+        pdf.setDash(10, 8)
+        pdf.line(x0, y_mid, x1, y_mid)
+        # Bottom
+        pdf.setLineWidth(solid_width)
+        pdf.setDash()
+        pdf.line(x0, y_bottom, x1, y_bottom)
+
+        coords.append((y_top, y_mid, y_bottom))
+
+    pdf.setDash()
+    return coords
 
 
 def draw_repeated_trace_text(
@@ -267,6 +311,125 @@ def generate_pdf(
     pdf.save()
 
 
+def generate_presets_preview(
+    output_path: Path,
+    font_family: str = "Solway",
+    font_weight: int = 400,
+    page_size=A4,
+) -> None:
+    width, height = page_size
+    margin = 36.0
+    left_x = margin
+    right_x = width - margin
+    top_y = height - margin
+
+    pdf = canvas.Canvas(str(output_path), pagesize=page_size)
+
+    # Prepare font
+    ttf_path = download_ttf_to_cache(font_family, font_weight)
+    font_name = register_font_from_ttf_path(font_family, font_weight, ttf_path)
+
+    # Define seven presets
+    presets: list[dict] = [
+        {"id": 1, "style": "double", "z": 48.0, "p": 2.0, "g": 18.0, "label": "Typ C: p=2, z=48"},
+        {"id": 2, "style": "double", "z": 48.0, "p": 3.0, "g": 18.0, "label": "Typ C: p=3, z=48"},
+        {"id": 3, "style": "double", "z": 36.0, "p": 2.0, "g": 16.0, "label": "Typ C: p=2, z=36"},
+        {"id": 4, "style": "triple", "z": 48.0, "x": 0.66, "g": 18.0, "label": "Trójliniowa: z=48, x=0.66"},
+        {"id": 5, "style": "triple", "z": 48.0, "x": 0.70, "g": 18.0, "label": "Trójliniowa: z=48, x=0.70"},
+        {"id": 6, "style": "triple", "z": 36.0, "x": 0.66, "g": 16.0, "label": "Trójliniowa: z=36, x=0.66"},
+        {"id": 7, "style": "double", "z": 48.0, "p": 4.0, "g": 18.0, "label": "Typ C: p=4, z=48"},
+    ]
+
+    block_gap = 8.0
+    block_height = (height - 2 * margin - block_gap * (len(presets) - 1)) / len(presets)
+
+    y_cursor = top_y
+
+    for preset in presets:
+        y_block_top = y_cursor
+        y_block_bottom = y_block_top - block_height
+
+        # Title and number
+        pdf.setFillColor(Color(0.9, 0.9, 0.9))
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(left_x, y_block_top - 14, f"{preset['id']}. {preset['label']}")
+
+        # Compute starting Y for first row lines (below the label)
+        start_y = y_block_top - 26
+
+        if preset["style"] == "double":
+            z = preset["z"]
+            p = preset["p"]
+            g = preset["g"]
+            rows = draw_double_pair_lines(
+                pdf,
+                left_x=left_x,
+                right_x=right_x,
+                top_y=start_y,
+                row_height=(z + 2 * p),
+                num_rows=2,
+                line_color=Color(0.85, 0.85, 0.85),
+                solid_width=1.0,
+                pair_spacing=p,
+                row_gap=g,
+            )
+            # Fit font to zone
+            _, y_top_inner0, y_bottom_inner0, _ = rows[0]
+            zone_h = y_top_inner0 - y_bottom_inner0
+            size = fit_font_size_to_zone(font_name, 64.0, zone_h)
+            # Content
+            samples = [TRACE_UPPER, TRACE_LOWER]
+            for ridx, (_to, _ti, ybi, _bo) in enumerate(rows):
+                draw_repeated_trace_text(
+                    pdf,
+                    text=samples[ridx % len(samples)],
+                    font_name=font_name,
+                    font_size=size,
+                    left_x=left_x + p * 2,
+                    right_x=right_x - p * 2,
+                    baseline_y=ybi,
+                    text_color=Color(0.45, 0.45, 0.45),
+                    spacing_em=1.0,
+                )
+        else:  # triple
+            z = preset["z"]
+            x_ratio = preset["x"]
+            g = preset["g"]
+            rows = draw_triple_lines(
+                pdf,
+                left_x=left_x,
+                right_x=right_x,
+                top_y=start_y,
+                z_height=z,
+                num_rows=2,
+                line_color=Color(0.85, 0.85, 0.85),
+                solid_width=1.0,
+                dashed_width=0.8,
+                xheight_ratio=x_ratio,
+                row_gap=g,
+            )
+            # Fit font so ascent ≈ z
+            size = fit_font_size_to_zone(font_name, 64.0, z)
+            samples = [TRACE_UPPER, TRACE_LOWER]
+            for ridx, (_top, _mid, bottom) in enumerate(rows):
+                draw_repeated_trace_text(
+                    pdf,
+                    text=samples[ridx % len(samples)],
+                    font_name=font_name,
+                    font_size=size,
+                    left_x=left_x + 8,
+                    right_x=right_x - 8,
+                    baseline_y=bottom,
+                    text_color=Color(0.45, 0.45, 0.45),
+                    spacing_em=1.0,
+                )
+
+        y_cursor = y_block_bottom - block_gap
+
+    pdf.showPage()
+    pdf.save()
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generuj karty/plakaty do pisania: liniatura podwójna (typ C) z czcionką Solway.")
     parser.add_argument("--text", type=str, default="", help="Tekst do śledzenia (jeśli pusty: alfabet, zdania, cyfry)")
@@ -295,6 +458,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     parser.add_argument("--no-fit-to-zone", dest="fit_to_zone", action="store_false", help="Nie dopasowuj rozmiaru do wysokości strefy")
     parser.set_defaults(fit_to_zone=True)
+
+    # Presets page
+    parser.add_argument("--presets", action="store_true", help="Wygeneruj stronę porównawczą 1–7 z różnymi liniaturami")
+
     return parser.parse_args(argv)
 
 
@@ -310,25 +477,33 @@ def main(argv: list[str]) -> int:
     ensure_directory(output_dir)
 
     try:
-        generate_pdf(
-            output_path=output_path,
-            text=args.text,
-            font_family=args.font_family,
-            font_weight=args.font_weight,
-            page_size=A4,
-            page_width_mm=args.page_width_mm if args.page_width_mm > 0 else None,
-            page_height_mm=args.page_height_mm if args.page_height_mm > 0 else None,
-            margin=args.margin,
-            margin_mm=args.margin_mm if args.margin_mm > 0 else None,
-            row_height=args.row_height,
-            row_height_mm=args.row_height_mm if args.row_height_mm > 0 else None,
-            row_gap=args.row_gap,
-            row_gap_mm=args.row_gap_mm if args.row_gap_mm > 0 else None,
-            font_size=args.font_size,
-            pair_spacing=args.pair_spacing,
-            pair_spacing_mm=args.pair_spacing_mm if args.pair_spacing_mm > 0 else None,
-            fit_to_zone=args.fit_to_zone,
-        )
+        if args.presets:
+            generate_presets_preview(
+                output_path=output_path,
+                font_family=args.font_family,
+                font_weight=args.font_weight,
+                page_size=A4,
+            )
+        else:
+            generate_pdf(
+                output_path=output_path,
+                text=args.text,
+                font_family=args.font_family,
+                font_weight=args.font_weight,
+                page_size=A4,
+                page_width_mm=args.page_width_mm if args.page_width_mm > 0 else None,
+                page_height_mm=args.page_height_mm if args.page_height_mm > 0 else None,
+                margin=args.margin,
+                margin_mm=args.margin_mm if args.margin_mm > 0 else None,
+                row_height=args.row_height,
+                row_height_mm=args.row_height_mm if args.row_height_mm > 0 else None,
+                row_gap=args.row_gap,
+                row_gap_mm=args.row_gap_mm if args.row_gap_mm > 0 else None,
+                font_size=args.font_size,
+                pair_spacing=args.pair_spacing,
+                pair_spacing_mm=args.pair_spacing_mm if args.pair_spacing_mm > 0 else None,
+                fit_to_zone=args.fit_to_zone,
+            )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

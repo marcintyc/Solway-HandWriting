@@ -32,6 +32,7 @@
         display: flex;
         gap: 12px;
         margin: 12px 0 24px;
+        flex-wrap: wrap;
       }
       .btn {
         display: inline-flex;
@@ -69,10 +70,13 @@
     <div class="container">
       <header>
         <h1>Solway Handwriting Worksheets</h1>
-        <p>Podgląd i pobieranie najnowszego wygenerowanego PDF. Co push do <code>main</code> aktualizuje ten plik.</p>
+        <p>Podgląd i pobieranie najnowszego PDF. Varianty liniatury 1–7: porównanie w osobnym pliku.</p>
         <div class="actions">
           <a class="btn" href="worksheet.pdf" download>
             Pobierz PDF
+          </a>
+          <a class="btn" href="presety-1-7.pdf" target="_blank" rel="noopener noreferrer">
+            Zobacz warianty 1–7
           </a>
           <a class="btn" href="https://github.com/marcintyc/Solway-HandWriting" target="_blank" rel="noopener noreferrer">
             Repozytorium GitHub
