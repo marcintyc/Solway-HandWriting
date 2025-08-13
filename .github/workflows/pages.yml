@@ -34,6 +34,7 @@ jobs:
         run: |
           mkdir -p dist
           python app/generate_worksheet.py --output dist/worksheet.pdf
+          python app/main.py --output dist/main.pdf
 
       - name: Build presets PDF
         run: |
