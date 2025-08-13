@@ -26,6 +26,9 @@ TRACE_WORDS_PL = [
     "Lubię czytać książki.",
     "Mama i tata idą do domu.",
     "Zosia rysuje zielone drzewo.",
+    "Zażółć gęślą jaźń.",
+    "Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
+    "Gruby miś śpi w zimnym łóżku.",
 ]
 
 
@@ -226,9 +229,9 @@ def generate_pdf(
     page_height_mm: float | None = None,
     margin: float = 54.0,
     margin_mm: float | None = None,
-    row_height: float = 0.0,
+    row_height: float = 56.0,
     row_height_mm: float | None = None,
-    row_gap: float = 16.0,
+    row_gap: float = 18.0,
     row_gap_mm: float | None = None,
     font_size: float = 64.0,
     pair_spacing: float = 4.0,
@@ -431,7 +434,7 @@ def generate_presets_preview(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generuj karty/plakaty do pisania: liniatura podwójna (typ C) z czcionką Solway.")
+    parser = argparse.ArgumentParser(description="Generuj karty/plakaty do pisania: liniatura podwójna (typ C, domyślnie preset 7) z czcionką Solway.")
     parser.add_argument("--text", type=str, default="", help="Tekst do śledzenia (jeśli pusty: alfabet, zdania, cyfry)")
     parser.add_argument("--output", type=str, default="output/worksheet.pdf", help="Ścieżka wyjściowego PDF")
     parser.add_argument("--font-family", type=str, default="Solway", help="Nazwa rodziny z Google Fonts")
@@ -445,15 +448,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--margin", type=float, default=54.0, help="Margines w pt")
     parser.add_argument("--margin-mm", type=float, default=0.0, help="Margines w mm (jeśli >0, nadpisuje --margin)")
 
-    parser.add_argument("--row-height", type=float, default=0.0, help="Wysokość wiersza w pt; 0 = równa rozmiarowi czcionki")
+    parser.add_argument("--row-height", type=float, default=56.0, help="Wysokość wiersza w pt (domyślnie preset 7: z=48, p=4 → 56)")
     parser.add_argument("--row-height-mm", type=float, default=0.0, help="Wysokość wiersza w mm")
 
-    parser.add_argument("--row-gap", type=float, default=16.0, help="Odstęp między wierszami w pt")
+    parser.add_argument("--row-gap", type=float, default=18.0, help="Odstęp między wierszami w pt (domyślnie preset 7)")
     parser.add_argument("--row-gap-mm", type=float, default=0.0, help="Odstęp między wierszami w mm")
 
     parser.add_argument("--font-size", type=float, default=64.0, help="Początkowy rozmiar czcionki w pt (dopasowywany do strefy)")
 
-    parser.add_argument("--pair-spacing", type=float, default=4.0, help="Odstęp wewnątrz pary linii (pt)")
+    parser.add_argument("--pair-spacing", type=float, default=4.0, help="Odstęp wewnątrz pary linii (pt, domyślnie preset 7)")
     parser.add_argument("--pair-spacing-mm", type=float, default=0.0, help="Odstęp wewnątrz pary linii w mm")
 
     parser.add_argument("--no-fit-to-zone", dest="fit_to_zone", action="store_false", help="Nie dopasowuj rozmiaru do wysokości strefy")

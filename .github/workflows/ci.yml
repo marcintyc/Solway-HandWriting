@@ -21,9 +21,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate sample worksheet
+      - name: Generate sample worksheet (preset 7 defaults)
         run: |
-          python app/generate_worksheet.py --output output/sample.pdf --font-size 64 --row-height 0 --row-gap 16 --margin 54 --pair-spacing 4
+          python app/generate_worksheet.py --output output/sample.pdf
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
