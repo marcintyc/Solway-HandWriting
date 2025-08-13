@@ -23,7 +23,7 @@ jobs:
 
       - name: Generate sample worksheet
         run: |
-          python app/generate_worksheet.py --text "Aa Bb Cc" --output output/sample.pdf --row-height 64 --row-gap 8 --margin 54
+          python app/generate_worksheet.py --text "Aa Bb Cc" --output output/sample.pdf --font-size 64 --row-height 0 --row-gap 16 --margin 54
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

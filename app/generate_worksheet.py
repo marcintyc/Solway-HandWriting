@@ -72,14 +72,14 @@ def draw_handwriting_lines(
     top_y: float,
     row_height: float,
     num_rows: int,
-    line_color: Color = Color(0.75, 0.75, 0.75),
-    solid_width: float = 1.0,
-    dashed_width: float = 0.8,
-    middle_dash: Tuple[int, int] = (6, 4),
-    row_gap: float = 8.0,
+    line_color: Color = Color(0.85, 0.85, 0.85),
+    solid_width: float = 1.2,
+    dashed_width: float = 0.9,
+    middle_dash: Tuple[int, int] = (10, 8),
+    row_gap: float = 16.0,
 ) -> list[Tuple[float, float, float]]:
     """
-    Draws primary-handwriting guide lines: top solid, middle dashed, bottom solid.
+    Three-line handwriting guide: top solid, middle dashed (x-height), bottom solid (baseline).
     Returns a list of (y_top, y_mid, y_bottom) per row for further text placement.
     """
     rows_y: list[Tuple[float, float, float]] = []
@@ -98,12 +98,12 @@ def draw_handwriting_lines(
         pdf.setDash()  # solid
         pdf.line(x0, row_top_y, x1, row_top_y)
 
-        # Middle dashed
+        # Middle dashed (x-height)
         pdf.setLineWidth(dashed_width)
         pdf.setDash(middle_dash[0], middle_dash[1])
         pdf.line(x0, row_mid_y, x1, row_mid_y)
 
-        # Bottom solid
+        # Bottom solid (baseline)
         pdf.setLineWidth(solid_width)
         pdf.setDash()
         pdf.line(x0, row_bottom_y, x1, row_bottom_y)
@@ -123,7 +123,7 @@ def draw_repeated_trace_text(
     left_x: float,
     right_x: float,
     baseline_y: float,
-    text_color: Color = Color(0.55, 0.55, 0.55),
+    text_color: Color = Color(0.5, 0.5, 0.5),
     spacing_em: float = 0.75,
 ) -> None:
     """Repeat the given text across the available width with spacing until it fills the line."""
@@ -157,17 +157,18 @@ def generate_pdf(
     font_weight: int = 400,
     page_size=A4,
     margin: float = 54.0,
-    row_height: float = 64.0,
-    row_gap: float = 8.0,
-    font_size: float | None = None,
+    row_height: float = 0.0,
+    row_gap: float = 16.0,
+    font_size: float = 64.0,
 ) -> None:
     width, height = page_size
     left_x = margin
     right_x = width - margin
     top_y = height - margin
 
-    if font_size is None:
-        font_size = max(10.0, row_height * 0.66)
+    # Row height derived from font size if not given
+    if row_height is None or row_height <= 0:
+        row_height = max(60.0, font_size)
 
     # Prepare font
     ttf_path = download_ttf_to_cache(font_family, font_weight)
@@ -186,15 +187,15 @@ def generate_pdf(
         top_y=top_y,
         row_height=row_height,
         num_rows=num_rows,
-        line_color=Color(0.8, 0.8, 0.8),
-        solid_width=1.0,
-        dashed_width=0.8,
-        middle_dash=(6, 6),
+        line_color=Color(0.85, 0.85, 0.85),
+        solid_width=1.2,
+        dashed_width=0.9,
+        middle_dash=(10, 8),
         row_gap=row_gap,
     )
 
-    # Draw repeated trace text on every other line (first, third, ...) to mimic worksheets
-    for idx, (_, _mid, bottom) in enumerate(rows):
+    # Draw repeated trace text on every other line (first, third, ...) with baseline at bottom line
+    for idx, (_top, _mid, bottom) in enumerate(rows):
         if idx % 2 == 0:
             draw_repeated_trace_text(
                 pdf,
@@ -204,29 +205,29 @@ def generate_pdf(
                 left_x=left_x + 8,
                 right_x=right_x - 8,
                 baseline_y=bottom,
-                text_color=Color(0.6, 0.6, 0.6),
+                text_color=Color(0.5, 0.5, 0.5),
                 spacing_em=1.0,
             )
 
     # Footer note
     pdf.setFillColor(Color(0.5, 0.5, 0.5))
     pdf.setFont("Helvetica", 8)
-    pdf.drawRightString(right_x, margin * 0.5, "Generated with Solway handwriting worksheet generator")
+    pdf.drawRightString(right_x, margin * 0.5, "Liniatura trójliniowa • Solway • generator PDF")
 
     pdf.showPage()
     pdf.save()
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate handwriting worksheets PDF with Solway font.")
-    parser.add_argument("--text", type=str, default="Aa Bb Cc", help="Text to repeat on tracing lines")
-    parser.add_argument("--output", type=str, default="output/worksheet.pdf", help="Output PDF path")
-    parser.add_argument("--font-family", type=str, default="Solway", help="Google Fonts family name")
-    parser.add_argument("--font-weight", type=int, default=400, help="Font weight (Google Fonts)")
-    parser.add_argument("--margin", type=float, default=54.0, help="Page margin in points")
-    parser.add_argument("--row-height", type=float, default=64.0, help="Row height in points")
-    parser.add_argument("--row-gap", type=float, default=8.0, help="Gap between rows in points")
-    parser.add_argument("--font-size", type=float, default=0.0, help="Font size; if 0 uses 66% of row height")
+    parser = argparse.ArgumentParser(description="Generuj karty do pisania (liniatura trójliniowa) z czcionką Solway.")
+    parser.add_argument("--text", type=str, default="Aa Bb Cc", help="Tekst do śledzenia na liniach (powtarzany)")
+    parser.add_argument("--output", type=str, default="output/worksheet.pdf", help="Ścieżka wyjściowego PDF")
+    parser.add_argument("--font-family", type=str, default="Solway", help="Nazwa rodziny z Google Fonts")
+    parser.add_argument("--font-weight", type=int, default=400, help="Grubość czcionki (Google Fonts)")
+    parser.add_argument("--margin", type=float, default=54.0, help="Margines strony w punktach")
+    parser.add_argument("--row-height", type=float, default=0.0, help="Wysokość wiersza w pt; 0 = równa rozmiarowi czcionki")
+    parser.add_argument("--row-gap", type=float, default=16.0, help="Odstęp między wierszami w pt")
+    parser.add_argument("--font-size", type=float, default=64.0, help="Rozmiar czcionki w pt (zalecane 60–72 pt)")
     return parser.parse_args(argv)
 
 
@@ -241,8 +242,6 @@ def main(argv: list[str]) -> int:
     output_dir = output_path.parent
     ensure_directory(output_dir)
 
-    font_size = None if args.font_size in (None, 0.0) else args.font_size
-
     try:
         generate_pdf(
             output_path=output_path,
@@ -252,7 +251,7 @@ def main(argv: list[str]) -> int:
             margin=args.margin,
             row_height=args.row_height,
             row_gap=args.row_gap,
-            font_size=font_size,
+            font_size=args.font_size,
         )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
