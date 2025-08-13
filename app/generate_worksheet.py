@@ -30,7 +30,14 @@ TRACE_WORDS_PL = [
     "Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
     "Gruby miś śpi w zimnym łóżku.",
 ]
-
+TRACE_WORDS_EN = [
+    "The quick brown fox jumps over the lazy dog.",
+    "I like to read books.",
+    "Please write neatly.",
+    "This is my cat.",
+    "We are learning English.",
+    "Good morning!",
+]
 
 PT_PER_MM = 72.0 / 25.4
 
@@ -134,7 +141,6 @@ def draw_triple_lines(
     xheight_ratio: float = 0.66,
     row_gap: float = 16.0,
 ) -> list[Tuple[float, float, float]]:
-    """Top solid, middle dashed (x-height), bottom solid (baseline). Returns (top, mid, bottom)."""
     coords: list[Tuple[float, float, float]] = []
     x0 = left_x
     x1 = right_x
@@ -163,6 +169,47 @@ def draw_triple_lines(
 
     pdf.setDash()
     return coords
+
+
+def draw_school_double_lines(
+    pdf: canvas.Canvas,
+    left_x: float,
+    right_x: float,
+    top_y: float,
+    z_height: float,
+    descender_ratio: float,
+    num_rows: int,
+    line_color: Color = Color(0.85, 0.85, 0.85),
+    helper_color: Color = Color(0.75, 0.75, 0.75),
+    solid_width: float = 1.2,
+    helper_width: float = 0.8,
+    row_gap: float = 16.0,
+) -> list[Tuple[float, float, float]]:
+    """Top line (cap), baseline, and a lighter descender guide below baseline. Returns (top, baseline, desc_guide)."""
+    rows: list[Tuple[float, float, float]] = []
+    x0 = left_x
+    x1 = right_x
+    pdf.setDash()
+
+    for i in range(num_rows):
+        y_top = top_y - i * (z_height + (z_height * descender_ratio) + row_gap)
+        y_base = y_top - z_height
+        y_desc = y_base - (z_height * descender_ratio)
+
+        # Top and baseline (solid)
+        pdf.setStrokeColor(line_color)
+        pdf.setLineWidth(solid_width)
+        pdf.line(x0, y_top, x1, y_top)
+        pdf.line(x0, y_base, x1, y_base)
+
+        # Descender helper (lighter)
+        pdf.setStrokeColor(helper_color)
+        pdf.setLineWidth(helper_width)
+        pdf.line(x0, y_desc, x1, y_desc)
+
+        rows.append((y_top, y_base, y_desc))
+
+    return rows
 
 
 def draw_repeated_trace_text(
@@ -237,6 +284,8 @@ def generate_pdf(
     pair_spacing: float = 4.0,
     pair_spacing_mm: float | None = None,
     fit_to_zone: bool = True,
+    style: Literal["school_double", "double_pair", "triple"] = "school_double",
+    descender_ratio: float = 0.3,
 ) -> None:
     # Resolve page size (pt)
     width, height = resolve_page_size(page_size, page_width_mm, page_height_mm)
@@ -268,46 +317,119 @@ def generate_pdf(
 
     pdf = canvas.Canvas(str(output_path), pagesize=(width, height))
 
-    rows = draw_double_pair_lines(
-        pdf,
-        left_x=left_x,
-        right_x=right_x,
-        top_y=top_y,
-        row_height=row_height,
-        num_rows=num_rows,
-        line_color=Color(0.85, 0.85, 0.85),
-        solid_width=1.4 if width > 2 * A4[0] else 1.2,
-        pair_spacing=pair_spacing,
-        row_gap=row_gap,
-    )
+    # Choose layout
+    sequence: list[str]
+    if text:
+        sequence = [text]
+    else:
+        # Default to English set for school style; otherwise Polish set retained
+        sequence = [TRACE_UPPER, TRACE_LOWER, *TRACE_WORDS_EN, TRACE_DIGITS] if style == "school_double" else [TRACE_UPPER, TRACE_LOWER, *TRACE_WORDS_PL, TRACE_DIGITS]
 
-    sequence: list[str] = [TRACE_UPPER, TRACE_LOWER, *TRACE_WORDS_PL, TRACE_DIGITS] if not text else [text]
+    if style == "double_pair":
+        rows_dp = draw_double_pair_lines(
+            pdf,
+            left_x=left_x,
+            right_x=right_x,
+            top_y=top_y,
+            row_height=row_height,
+            num_rows=num_rows,
+            line_color=Color(0.85, 0.85, 0.85),
+            solid_width=1.4 if width > 2 * A4[0] else 1.2,
+            pair_spacing=pair_spacing,
+            row_gap=row_gap,
+        )
+        # Fit to zone between inner lines
+        if rows_dp:
+            _, y_top_inner0, y_bottom_inner0, _ = rows_dp[0]
+            zone_height = (y_top_inner0 - y_bottom_inner0)
+            if fit_to_zone:
+                font_size = fit_font_size_to_zone(font_name, font_size, zone_height)
+        for idx, (_to, _ti, ybi, _bo) in enumerate(rows_dp):
+            if idx % 2 == 0:
+                draw_repeated_trace_text(
+                    pdf,
+                    text=sequence[idx % len(sequence)],
+                    font_name=font_name,
+                    font_size=font_size,
+                    left_x=left_x + pair_spacing * 2,
+                    right_x=right_x - pair_spacing * 2,
+                    baseline_y=ybi,
+                    text_color=Color(0.45, 0.45, 0.45),
+                    spacing_em=1.0,
+                )
+    elif style == "triple":
+        # Interpret row_height as z-height directly
+        z_height = row_height
+        rows_tr = draw_triple_lines(
+            pdf,
+            left_x=left_x,
+            right_x=right_x,
+            top_y=top_y,
+            z_height=z_height,
+            num_rows=num_rows,
+            line_color=Color(0.85, 0.85, 0.85),
+            solid_width=1.2,
+            dashed_width=0.9,
+            xheight_ratio=0.66,
+            row_gap=row_gap,
+        )
+        if rows_tr and fit_to_zone:
+            font_size = fit_font_size_to_zone(font_name, font_size, z_height)
+        for idx, (_top, _mid, bottom) in enumerate(rows_tr):
+            if idx % 2 == 0:
+                draw_repeated_trace_text(
+                    pdf,
+                    text=sequence[idx % len(sequence)],
+                    font_name=font_name,
+                    font_size=font_size,
+                    left_x=left_x + 8,
+                    right_x=right_x - 8,
+                    baseline_y=bottom,
+                    text_color=Color(0.45, 0.45, 0.45),
+                    spacing_em=1.0,
+                )
+    else:  # school_double
+        # Derive z from row_height and descender if needed
+        z_height = row_height / (1.0 + max(0.0, descender_ratio))
+        rows_sd = draw_school_double_lines(
+            pdf,
+            left_x=left_x,
+            right_x=right_x,
+            top_y=top_y,
+            z_height=z_height,
+            descender_ratio=descender_ratio,
+            num_rows=num_rows,
+            line_color=Color(0.85, 0.85, 0.85),
+            helper_color=Color(0.75, 0.75, 0.75),
+            solid_width=1.2,
+            helper_width=0.8,
+            row_gap=row_gap,
+        )
+        # Fit so ascent ≈ z
+        if rows_sd and fit_to_zone:
+            font_size = fit_font_size_to_zone(font_name, font_size, z_height)
+        for idx, (y_top, y_base, y_desc) in enumerate(rows_sd):
+            if idx % 2 == 0:
+                draw_repeated_trace_text(
+                    pdf,
+                    text=sequence[idx % len(sequence)],
+                    font_name=font_name,
+                    font_size=font_size,
+                    left_x=left_x + 8,
+                    right_x=right_x - 8,
+                    baseline_y=y_base,
+                    text_color=Color(0.45, 0.45, 0.45),
+                    spacing_em=1.0,
+                )
 
-    if rows:
-        _, y_top_inner0, y_bottom_inner0, _ = rows[0]
-        zone_height = (y_top_inner0 - y_bottom_inner0)
-        if fit_to_zone:
-            font_size = fit_font_size_to_zone(font_name, font_size, zone_height)
-
-    for idx, (y_top_outer, y_top_inner, y_bottom_inner, y_bottom_outer) in enumerate(rows):
-        if idx % 2 == 0:
-            baseline = y_bottom_inner
-            content = sequence[idx % len(sequence)]
-            draw_repeated_trace_text(
-                pdf,
-                text=content,
-                font_name=font_name,
-                font_size=font_size,
-                left_x=left_x + pair_spacing * 2,
-                right_x=right_x - pair_spacing * 2,
-                baseline_y=baseline,
-                text_color=Color(0.45, 0.45, 0.45),
-                spacing_em=1.0,
-            )
-
+    # Footer
     pdf.setFillColor(Color(0.5, 0.5, 0.5))
     pdf.setFont("Helvetica", 8)
-    footer = "Liniatura podwójna (typ C) • baseline = dolna linia wewnętrzna • Solway"
+    footer = {
+        "school_double": "School double lines • top + baseline + descender guide • Solway",
+        "double_pair": "Double-pair (Typ C) • inner baseline • Solway",
+        "triple": "Tri-line • x-height dashed • Solway",
+    }[style]
     pdf.drawRightString(right_x, margin * 0.5, footer)
 
     pdf.showPage()
@@ -434,7 +556,7 @@ def generate_presets_preview(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generuj karty/plakaty do pisania: liniatura podwójna (typ C, domyślnie preset 7) z czcionką Solway.")
+    parser = argparse.ArgumentParser(description="Generuj karty/plakaty do pisania (school double / typ C / trójliniowa) z czcionką Solway.")
     parser.add_argument("--text", type=str, default="", help="Tekst do śledzenia (jeśli pusty: alfabet, zdania, cyfry)")
     parser.add_argument("--output", type=str, default="output/worksheet.pdf", help="Ścieżka wyjściowego PDF")
     parser.add_argument("--font-family", type=str, default="Solway", help="Nazwa rodziny z Google Fonts")
@@ -448,16 +570,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--margin", type=float, default=54.0, help="Margines w pt")
     parser.add_argument("--margin-mm", type=float, default=0.0, help="Margines w mm (jeśli >0, nadpisuje --margin)")
 
-    parser.add_argument("--row-height", type=float, default=56.0, help="Wysokość wiersza w pt (domyślnie preset 7: z=48, p=4 → 56)")
+    parser.add_argument("--row-height", type=float, default=56.0, help="Wysokość wiersza w pt (school double: z + desc)")
     parser.add_argument("--row-height-mm", type=float, default=0.0, help="Wysokość wiersza w mm")
 
-    parser.add_argument("--row-gap", type=float, default=18.0, help="Odstęp między wierszami w pt (domyślnie preset 7)")
+    parser.add_argument("--row-gap", type=float, default=18.0, help="Odstęp między wierszami w pt")
     parser.add_argument("--row-gap-mm", type=float, default=0.0, help="Odstęp między wierszami w mm")
 
     parser.add_argument("--font-size", type=float, default=64.0, help="Początkowy rozmiar czcionki w pt (dopasowywany do strefy)")
 
-    parser.add_argument("--pair-spacing", type=float, default=4.0, help="Odstęp wewnątrz pary linii (pt, domyślnie preset 7)")
-    parser.add_argument("--pair-spacing-mm", type=float, default=0.0, help="Odstęp wewnątrz pary linii w mm")
+    parser.add_argument("--pair-spacing", type=float, default=4.0, help="(Typ C) Odstęp wewnątrz pary linii w pt")
+    parser.add_argument("--pair-spacing-mm", type=float, default=0.0, help="(Typ C) Odstęp wewnątrz pary linii w mm")
+
+    parser.add_argument("--style", type=str, choices=["school_double", "double_pair", "triple"], default="school_double", help="Styl liniatury")
+    parser.add_argument("--descender-ratio", type=float, default=0.3, help="(School double) Udział strefy ogonków względem z (np. 0.3)")
 
     parser.add_argument("--no-fit-to-zone", dest="fit_to_zone", action="store_false", help="Nie dopasowuj rozmiaru do wysokości strefy")
     parser.set_defaults(fit_to_zone=True)
@@ -506,6 +631,8 @@ def main(argv: list[str]) -> int:
                 pair_spacing=args.pair_spacing,
                 pair_spacing_mm=args.pair_spacing_mm if args.pair_spacing_mm > 0 else None,
                 fit_to_zone=args.fit_to_zone,
+                style=args.style,
+                descender_ratio=args.descender_ratio,
             )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
