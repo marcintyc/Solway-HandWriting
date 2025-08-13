@@ -11,7 +11,7 @@ from typing import Tuple
 import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.colors import Color, black, gray
+from reportlab.lib.colors import Color, black
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -72,7 +72,7 @@ def draw_handwriting_lines(
     top_y: float,
     row_height: float,
     num_rows: int,
-    line_color: Color = gray(0.75),
+    line_color: Color = Color(0.75, 0.75, 0.75),
     solid_width: float = 1.0,
     dashed_width: float = 0.8,
     middle_dash: Tuple[int, int] = (6, 4),
@@ -123,7 +123,7 @@ def draw_repeated_trace_text(
     left_x: float,
     right_x: float,
     baseline_y: float,
-    text_color: Color = gray(0.55),
+    text_color: Color = Color(0.55, 0.55, 0.55),
     spacing_em: float = 0.75,
 ) -> None:
     """Repeat the given text across the available width with spacing until it fills the line."""
@@ -186,7 +186,7 @@ def generate_pdf(
         top_y=top_y,
         row_height=row_height,
         num_rows=num_rows,
-        line_color=gray(0.8),
+        line_color=Color(0.8, 0.8, 0.8),
         solid_width=1.0,
         dashed_width=0.8,
         middle_dash=(6, 6),
@@ -204,12 +204,12 @@ def generate_pdf(
                 left_x=left_x + 8,
                 right_x=right_x - 8,
                 baseline_y=bottom,
-                text_color=gray(0.6),
+                text_color=Color(0.6, 0.6, 0.6),
                 spacing_em=1.0,
             )
 
     # Footer note
-    pdf.setFillColor(gray(0.5))
+    pdf.setFillColor(Color(0.5, 0.5, 0.5))
     pdf.setFont("Helvetica", 8)
     pdf.drawRightString(right_x, margin * 0.5, "Generated with Solway handwriting worksheet generator")
 
