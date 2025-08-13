@@ -33,7 +33,7 @@ jobs:
       - name: Build worksheet PDF
         run: |
           mkdir -p dist
-          python app/generate_worksheet.py --text "Aa Bb Cc" --output dist/worksheet.pdf --font-size 64 --row-height 0 --row-gap 16 --margin 54
+          python app/generate_worksheet.py --text "Aa Bb Cc" --output dist/worksheet.pdf --font-size 64 --row-height 0 --row-gap 16 --margin 54 --pair-spacing 4
 
       - name: Prepare static site
         run: |
