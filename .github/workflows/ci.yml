@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate sample worksheet
+        run: |
+          python app/generate_worksheet.py --text "Aa Bb Cc" --output output/sample.pdf --row-height 64 --row-gap 8 --margin 54
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-worksheet
+          path: output/sample.pdf
