@@ -22,21 +22,32 @@ TRACE_UPPER = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
 TRACE_LOWER = "a b c d e f g h i j k l m n o p q r s t u v w x y z"
 TRACE_DIGITS = "0 1 2 3 4 5 6 7 8 9"
 TRACE_WORDS_PL = [
-    "Ala ma kota.",
-    "Lubię czytać książki.",
-    "Mama i tata idą do domu.",
-    "Zosia rysuje zielone drzewo.",
+    "Ala ma kota i psa.",
+    "Mama piecze ciasto w kuchni.",
+    "Dzieci bawią się w ogrodzie.",
+    "Słońce świeci jasno na niebie.",
+    "Kwiaty pachną pięknie w ogrodzie.",
+    "Ćwiczę pisanie każdego dnia.",
+    "Literki piszę starannie i czytelnie.",
+    "Moja rodzina jest bardzo kochana.",
+    "W szkole uczę się nowych rzeczy.",
+    "Lubię czytać ciekawe książki.",
     "Zażółć gęślą jaźń.",
     "Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
-    "Gruby miś śpi w zimnym łóżku.",
 ]
 TRACE_WORDS_EN = [
+    "I love to write beautiful letters.",
+    "Practice makes perfect handwriting.",
     "The quick brown fox jumps over the lazy dog.",
-    "I like to read books.",
-    "Please write neatly.",
-    "This is my cat.",
-    "We are learning English.",
-    "Good morning!",
+    "Beautiful cursive writing takes time.",
+    "My handwriting is getting better every day.",
+    "I write with care and attention.",
+    "Neat handwriting shows good habits.",
+    "Writing by hand helps me learn better.",
+    "Good penmanship is a valuable skill.",
+    "I am proud of my handwriting progress.",
+    "Today I will practice my best writing.",
+    "Careful writing shows respect for words.",
 ]
 
 PT_PER_MM = 72.0 / 25.4
@@ -230,19 +241,43 @@ def draw_repeated_trace_text(
     if not token:
         return
 
-    spacing = " " * max(1, int(spacing_em))
-    unit = f"{token}{spacing}"
-    unit_width = pdfmetrics.stringWidth(unit, font_name, font_size)
-    if unit_width <= 0:
-        return
-
+    # Calculate proper spacing for better letter alignment
     max_width = right_x - left_x
-    count = max(1, int(max_width // unit_width))
-
-    x = left_x
-    for _ in range(count):
-        pdf.drawString(x, baseline_y, unit)
-        x += unit_width
+    
+    # For single characters or short sequences, use better spacing logic
+    if len(token) <= 3:
+        # Calculate character width with better spacing for letters
+        char_width = pdfmetrics.stringWidth("M", font_name, font_size)  # Use 'M' as reference
+        optimal_spacing = char_width * (1.0 + spacing_em)
+        count = max(1, int(max_width / optimal_spacing))
+        
+        # Center the content within the available width
+        total_content_width = count * optimal_spacing
+        start_x = left_x + (max_width - total_content_width) / 2
+        
+        x = start_x
+        for _ in range(count):
+            pdf.drawString(x, baseline_y, token)
+            x += optimal_spacing
+    else:
+        # For longer text (sentences), use word-based layout
+        spacing = " " * max(1, int(spacing_em * 2))
+        unit = f"{token}{spacing}"
+        unit_width = pdfmetrics.stringWidth(unit, font_name, font_size)
+        
+        if unit_width <= 0:
+            return
+            
+        count = max(1, int(max_width // unit_width))
+        
+        # Center the content
+        total_width = count * unit_width
+        start_x = left_x + (max_width - total_width) / 2
+        
+        x = start_x
+        for _ in range(count):
+            pdf.drawString(x, baseline_y, unit)
+            x += unit_width
 
 
 def fit_font_size_to_zone(font_name: str, base_font_size: float, zone_height: float) -> float:
@@ -251,9 +286,13 @@ def fit_font_size_to_zone(font_name: str, base_font_size: float, zone_height: fl
     ascent, descent = pdfmetrics.getAscentDescent(font_name, base_font_size)
     if ascent <= 0:
         return base_font_size
-    scale = zone_height / float(ascent)
+    
+    # Use a more conservative scaling to ensure letters fit well within lines
+    # Account for both ascent and descent for better vertical positioning
+    total_font_height = ascent - descent  # descent is negative
+    scale = (zone_height * 0.85) / float(total_font_height)  # Use 85% of zone height for better fit
     size = base_font_size * scale
-    return max(56.0, min(800.0, size))
+    return max(48.0, min(600.0, size))  # Adjusted min/max bounds for better readability
 
 
 def resolve_page_size(
@@ -346,16 +385,19 @@ def generate_pdf(
                 font_size = fit_font_size_to_zone(font_name, font_size, zone_height)
         for idx, (_to, _ti, ybi, _bo) in enumerate(rows_dp):
             if idx % 2 == 0:
+                # Adjust baseline for better letter positioning
+                descent = pdfmetrics.getAscentDescent(font_name, font_size)[1]
+                adjusted_baseline = ybi - (descent * 0.1)
                 draw_repeated_trace_text(
                     pdf,
                     text=sequence[idx % len(sequence)],
                     font_name=font_name,
                     font_size=font_size,
-                    left_x=left_x + pair_spacing * 2,
-                    right_x=right_x - pair_spacing * 2,
-                    baseline_y=ybi,
-                    text_color=Color(0.45, 0.45, 0.45),
-                    spacing_em=1.0,
+                    left_x=left_x + pair_spacing * 3,
+                    right_x=right_x - pair_spacing * 3,
+                    baseline_y=adjusted_baseline,
+                    text_color=Color(0.42, 0.42, 0.42),
+                    spacing_em=1.2,
                 )
     elif style == "triple":
         # Interpret row_height as z-height directly
@@ -377,16 +419,19 @@ def generate_pdf(
             font_size = fit_font_size_to_zone(font_name, font_size, z_height)
         for idx, (_top, _mid, bottom) in enumerate(rows_tr):
             if idx % 2 == 0:
+                # Adjust baseline for better letter positioning
+                descent = pdfmetrics.getAscentDescent(font_name, font_size)[1]
+                adjusted_baseline = bottom - (descent * 0.1)
                 draw_repeated_trace_text(
                     pdf,
                     text=sequence[idx % len(sequence)],
                     font_name=font_name,
                     font_size=font_size,
-                    left_x=left_x + 8,
-                    right_x=right_x - 8,
-                    baseline_y=bottom,
-                    text_color=Color(0.45, 0.45, 0.45),
-                    spacing_em=1.0,
+                    left_x=left_x + 12,
+                    right_x=right_x - 12,
+                    baseline_y=adjusted_baseline,
+                    text_color=Color(0.42, 0.42, 0.42),
+                    spacing_em=1.2,
                 )
     else:  # school_double
         # Derive z from row_height and descender if needed
@@ -410,16 +455,19 @@ def generate_pdf(
             font_size = fit_font_size_to_zone(font_name, font_size, z_height)
         for idx, (y_top, y_base, y_desc) in enumerate(rows_sd):
             if idx % 2 == 0:
+                # Adjust baseline for better letter positioning
+                descent = pdfmetrics.getAscentDescent(font_name, font_size)[1]
+                adjusted_baseline = y_base - (descent * 0.1)  # Slight adjustment for better visual alignment
                 draw_repeated_trace_text(
                     pdf,
                     text=sequence[idx % len(sequence)],
                     font_name=font_name,
                     font_size=font_size,
-                    left_x=left_x + 8,
-                    right_x=right_x - 8,
-                    baseline_y=y_base,
-                    text_color=Color(0.45, 0.45, 0.45),
-                    spacing_em=1.0,
+                    left_x=left_x + 12,
+                    right_x=right_x - 12,
+                    baseline_y=adjusted_baseline,
+                    text_color=Color(0.42, 0.42, 0.42),  # Slightly darker for better visibility
+                    spacing_em=1.2,  # Better spacing
                 )
 
     # Footer
