@@ -18,6 +18,16 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 GOOGLE_FONTS_CSS_API = "https://fonts.googleapis.com/css2?family={family}:wght@{weight}"
 
+TRACE_UPPER = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
+TRACE_LOWER = "a b c d e f g h i j k l m n o p q r s t u v w x y z"
+TRACE_DIGITS = "0 1 2 3 4 5 6 7 8 9"
+TRACE_WORDS_PL = [
+    "Ala ma kota.",
+    "Lubię czytać książki.",
+    "Mama i tata idą do domu.",
+    "Zosia rysuje zielone drzewo.",
+]
+
 
 def ensure_directory(path: Path) -> None:
     if not path.exists():
@@ -39,7 +49,6 @@ def get_ttf_url_from_google_fonts(font_family: str, weight: int = 400) -> str:
 
 def download_ttf_to_cache(font_family: str, weight: int = 400, cache_dir: Path | None = None) -> Path:
     if cache_dir is None:
-        # Project-local cache directory
         project_root = Path(__file__).resolve().parents[1]
         cache_dir = project_root / ".cache" / "fonts"
     ensure_directory(cache_dir)
@@ -58,7 +67,6 @@ def download_ttf_to_cache(font_family: str, weight: int = 400, cache_dir: Path |
 
 
 def register_font_from_ttf_path(font_family: str, weight: int, ttf_path: Path) -> str:
-    # Normalize a font name for use in reportlab
     font_name = f"{font_family}-{weight}"
     if font_name not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(TTFont(font_name, str(ttf_path)))
@@ -77,10 +85,6 @@ def draw_double_pair_lines(
     pair_spacing: float = 4.0,
     row_gap: float = 16.0,
 ) -> list[Tuple[float, float, float, float]]:
-    """
-    Double-pair layout per row: two close lines at the top edge and two close lines at the bottom edge.
-    Middle is open (blank). Returns list of (y_top_outer, y_top_inner, y_bottom_inner, y_bottom_outer).
-    """
     rows_y: list[Tuple[float, float, float, float]] = []
     x0 = left_x
     x1 = right_x
@@ -94,11 +98,10 @@ def draw_double_pair_lines(
         y_bottom_outer = y_top_outer - row_height
         y_bottom_inner = y_bottom_outer + pair_spacing
 
-        # Top pair
         pdf.setDash()
+        # Top pair
         pdf.line(x0, y_top_outer, x1, y_top_outer)
         pdf.line(x0, y_top_inner, x1, y_top_inner)
-
         # Bottom pair
         pdf.line(x0, y_bottom_outer, x1, y_bottom_outer)
         pdf.line(x0, y_bottom_inner, x1, y_bottom_inner)
@@ -116,10 +119,9 @@ def draw_repeated_trace_text(
     left_x: float,
     right_x: float,
     baseline_y: float,
-    text_color: Color = Color(0.5, 0.5, 0.5),
+    text_color: Color = Color(0.45, 0.45, 0.45),
     spacing_em: float = 0.75,
 ) -> None:
-    """Repeat the given text across the available width with spacing until it fills the line."""
     pdf.setFillColor(text_color)
     pdf.setFont(font_name, font_size)
 
@@ -138,8 +140,21 @@ def draw_repeated_trace_text(
 
     x = left_x
     for _ in range(count):
-        pdf.drawString(x, baseline_y + 0.5, unit)
+        pdf.drawString(x, baseline_y, unit)
         x += unit_width
+
+
+def fit_font_size_to_zone(font_name: str, base_font_size: float, zone_height: float) -> float:
+    """Scale font size so ascent equals zone height (letters reach top inner line)."""
+    if base_font_size <= 0:
+        base_font_size = 64.0
+    ascent, descent = pdfmetrics.getAscentDescent(font_name, base_font_size)
+    if ascent <= 0:
+        return base_font_size
+    scale = zone_height / float(ascent)
+    size = base_font_size * scale
+    # Keep within a practical range 56–80 pt
+    return max(56.0, min(80.0, size))
 
 
 def generate_pdf(
@@ -153,6 +168,7 @@ def generate_pdf(
     row_gap: float = 16.0,
     font_size: float = 64.0,
     pair_spacing: float = 4.0,
+    fit_to_zone: bool = True,
 ) -> None:
     width, height = page_size
     left_x = margin
@@ -183,25 +199,36 @@ def generate_pdf(
         row_gap=row_gap,
     )
 
-    # Place tracing text centered vertically in the middle gap per alternate row
+    # Rotate trace content across rows: upper, lower, words, digits, then repeat
+    sequence: list[str] = [TRACE_UPPER, TRACE_LOWER, *TRACE_WORDS_PL, TRACE_DIGITS]
+
+    # Fit font size so ascent reaches the inner top line from the baseline (bottom inner)
+    # Compute zone once using first row
+    if rows:
+        _, y_top_inner0, y_bottom_inner0, _ = rows[0]
+        zone_height = (y_top_inner0 - y_bottom_inner0)
+        if fit_to_zone:
+            font_size = fit_font_size_to_zone(font_name, font_size, zone_height)
+
     for idx, (y_top_outer, y_top_inner, y_bottom_inner, y_bottom_outer) in enumerate(rows):
         if idx % 2 == 0:
-            middle_center = (y_top_inner + y_bottom_inner) / 2.0
+            baseline = y_bottom_inner  # baseline on bottom-inner line so letters overlap it
+            content = sequence[idx % len(sequence)]
             draw_repeated_trace_text(
                 pdf,
-                text=text,
+                text=content,
                 font_name=font_name,
                 font_size=font_size,
                 left_x=left_x + 8,
                 right_x=right_x - 8,
-                baseline_y=middle_center - (font_size * 0.3),
-                text_color=Color(0.5, 0.5, 0.5),
+                baseline_y=baseline,
+                text_color=Color(0.45, 0.45, 0.45),
                 spacing_em=1.0,
             )
 
     pdf.setFillColor(Color(0.5, 0.5, 0.5))
     pdf.setFont("Helvetica", 8)
-    pdf.drawRightString(right_x, margin * 0.5, "Liniatura podwójna (double-line) • Solway • generator PDF")
+    pdf.drawRightString(right_x, margin * 0.5, "Liniatura podwójna • baseline na linii wewn. dolnej • Solway")
 
     pdf.showPage()
     pdf.save()
@@ -209,7 +236,7 @@ def generate_pdf(
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generuj karty do pisania: liniatura podwójna (double-line) z czcionką Solway.")
-    parser.add_argument("--text", type=str, default="Aa Bb Cc", help="Tekst do śledzenia na liniach (powtarzany)")
+    parser.add_argument("--text", type=str, default="", help="Tekst do śledzenia (jeśli pusty, użyte zostaną predefiniowane sekwencje)")
     parser.add_argument("--output", type=str, default="output/worksheet.pdf", help="Ścieżka wyjściowego PDF")
     parser.add_argument("--font-family", type=str, default="Solway", help="Nazwa rodziny z Google Fonts")
     parser.add_argument("--font-weight", type=int, default=400, help="Grubość czcionki (Google Fonts)")
@@ -218,6 +245,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--row-gap", type=float, default=16.0, help="Odstęp między wierszami w pt")
     parser.add_argument("--font-size", type=float, default=64.0, help="Rozmiar czcionki w pt (zalecane 60–72 pt)")
     parser.add_argument("--pair-spacing", type=float, default=4.0, help="Odstęp wewnątrz pary linii (pt)")
+    parser.add_argument("--no-fit-to-zone", dest="fit_to_zone", action="store_false", help="Nie dopasowuj rozmiaru do wysokości strefy")
+    parser.set_defaults(fit_to_zone=True)
     return parser.parse_args(argv)
 
 
@@ -232,10 +261,12 @@ def main(argv: list[str]) -> int:
     output_dir = output_path.parent
     ensure_directory(output_dir)
 
+    text = args.text if args.text else ""
+
     try:
         generate_pdf(
             output_path=output_path,
-            text=args.text,
+            text=text,
             font_family=args.font_family,
             font_weight=args.font_weight,
             margin=args.margin,
@@ -243,6 +274,7 @@ def main(argv: list[str]) -> int:
             row_gap=args.row_gap,
             font_size=args.font_size,
             pair_spacing=args.pair_spacing,
+            fit_to_zone=args.fit_to_zone,
         )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
